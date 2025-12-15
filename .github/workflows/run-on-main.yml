@@ -20,8 +20,3 @@ jobs:
   helm-lint:
     name: Helm Lint
     uses: ./.github/workflows/helm-lint.yml
-
-  image-build-and-push:
-    name: Build and Push Image
-    needs: [helm-lint]
-    uses: ./.github/workflows/image-build-and-publish.yml
