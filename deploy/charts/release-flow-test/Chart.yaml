@@ -13,3 +13,6 @@ maintainers:
 keywords:
   - test
   - release-flow
+annotations:
+  org.opencontainers.image.source: "https://github.com/ChrisJBurns/release-flow-test"
+  org.opencontainers.image.licenses: "Apache-2.0"

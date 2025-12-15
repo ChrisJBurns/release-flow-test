@@ -113,10 +113,7 @@ jobs:
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
           helm push ${{ env.CHART_NAME }}-${{ steps.version.outputs.version }}.tgz \
-            oci://${{ env.REGISTRY }}/${OWNER} \
-            --annotation "org.opencontainers.image.source=https://github.com/${{ github.repository }}" \
-            --annotation "org.opencontainers.image.description=Helm chart for release-flow-test" \
-            --annotation "org.opencontainers.image.licenses=Apache-2.0"
+            oci://${{ env.REGISTRY }}/${OWNER}
           echo "Pushed chart to: oci://${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }}:${{ steps.version.outputs.version }}"
 
       - name: Verify published chart
