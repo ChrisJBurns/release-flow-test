@@ -1,7 +1,7 @@
 # Release Workflow
 #
 # This workflow is triggered when a GitHub Release is published.
-# It builds and publishes the container image.
+# It builds and publishes the container image, then publishes the Helm chart.
 
 name: Release
 
@@ -9,12 +9,136 @@ on:
   release:
     types: [published]
 
-permissions:
-  contents: write
-  packages: write
-  id-token: write
+env:
+  REGISTRY: ghcr.io
+  CHART_NAME: release-flow-test
 
 jobs:
   image-build-and-push:
     name: Build and Push Image
+    # Skip RC/pre-release tags
+    if: ${{ !github.event.release.prerelease && !contains(github.event.release.tag_name, '-rc') }}
     uses: ./.github/workflows/image-build-and-publish.yml
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+  publish-helm:
+    name: Publish Helm Chart
+    needs: [image-build-and-push]
+    # Skip RC/pre-release tags
+    if: ${{ !github.event.release.prerelease && !contains(github.event.release.tag_name, '-rc') }}
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Extract version
+        id: version
+        run: |
+          TAG="${{ github.event.release.tag_name }}"
+          VERSION="${TAG#v}"  # Remove 'v' prefix: v1.0.0 -> 1.0.0
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Extracted version: $VERSION from tag: $TAG"
+
+      - name: Verify VERSION file matches tag
+        run: |
+          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
+          TAG_VERSION="${{ steps.version.outputs.version }}"
+          if [ "$FILE_VERSION" != "$TAG_VERSION" ]; then
+            echo "Error: VERSION file ($FILE_VERSION) does not match tag ($TAG_VERSION)"
+            exit 1
+          fi
+          echo "VERSION file matches tag: $FILE_VERSION"
+
+      - name: Verify Chart.yaml versions
+        run: |
+          CHART_PATH="deploy/charts/${{ env.CHART_NAME }}/Chart.yaml"
+          EXPECTED="${{ steps.version.outputs.version }}"
+
+          CHART_VERSION=$(grep '^version:' "$CHART_PATH" | awk '{print $2}')
+          APP_VERSION=$(grep '^appVersion:' "$CHART_PATH" | awk '{print $2}' | tr -d '"')
+
+          if [ "$CHART_VERSION" != "$EXPECTED" ]; then
+            echo "Error: Chart version ($CHART_VERSION) does not match expected ($EXPECTED)"
+            exit 1
+          fi
+
+          if [ "$APP_VERSION" != "$EXPECTED" ]; then
+            echo "Error: App version ($APP_VERSION) does not match expected ($EXPECTED)"
+            exit 1
+          fi
+
+          echo "Chart.yaml versions verified: $EXPECTED"
+
+      - name: Verify values.yaml image tag
+        run: |
+          VALUES_PATH="deploy/charts/${{ env.CHART_NAME }}/values.yaml"
+          EXPECTED="${{ steps.version.outputs.version }}"
+
+          # Extract image.tag value
+          IMAGE_TAG=$(grep '^\s*tag:' "$VALUES_PATH" | head -1 | awk '{print $2}' | tr -d '"')
+
+          if [ "$IMAGE_TAG" != "$EXPECTED" ]; then
+            echo "Error: values.yaml image.tag ($IMAGE_TAG) does not match expected ($EXPECTED)"
+            exit 1
+          fi
+
+          echo "values.yaml image.tag verified: $EXPECTED"
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Login to GHCR
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} \
+            --username ${{ github.actor }} \
+            --password-stdin
+
+      - name: Package Helm chart
+        run: |
+          helm package deploy/charts/${{ env.CHART_NAME }} \
+            --version ${{ steps.version.outputs.version }} \
+            --app-version ${{ steps.version.outputs.version }}
+          echo "Packaged chart: ${{ env.CHART_NAME }}-${{ steps.version.outputs.version }}.tgz"
+
+      - name: Push to GHCR
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm push ${{ env.CHART_NAME }}-${{ steps.version.outputs.version }}.tgz \
+            oci://${{ env.REGISTRY }}/${OWNER}
+          echo "Pushed chart to: oci://${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }}:${{ steps.version.outputs.version }}"
+
+      - name: Verify published chart
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          helm show chart oci://${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }} \
+            --version ${{ steps.version.outputs.version }}
+
+      - name: Summary
+        run: |
+          OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
+          echo "## Helm Chart Published" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+          echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Chart | \`${{ env.CHART_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Version | \`${{ steps.version.outputs.version }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "| Registry | \`oci://${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }}\` |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Installation" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`bash" >> $GITHUB_STEP_SUMMARY
+          echo "helm install my-release oci://${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }} --version ${{ steps.version.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+
+      - name: Logout from GHCR
+        if: always()
+        run: helm registry logout ${{ env.REGISTRY }}
