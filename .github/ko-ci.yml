@@ -1,0 +1,8 @@
+builds:
+  - id: release-flow-test
+    dir: .
+    ldflags:
+      - -s -w
+      - -X main.Version={{.Env.VERSION}}
+      - -X main.Commit={{.Env.COMMIT}}
+      - -X main.BuildDate={{.Env.BUILD_DATE}}

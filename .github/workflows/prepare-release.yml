@@ -1,0 +1,115 @@
+# Prepare Release Workflow
+#
+# This workflow is triggered when a release candidate tag (v*-rc*) is pushed.
+# It extracts the base version, updates VERSION, Chart.yaml, and values.yaml,
+# then creates a PR for review.
+#
+# Example: Pushing tag v1.0.0-rc0 will create a PR to set version to 1.0.0
+
+name: Prepare Release
+
+on:
+  push:
+    tags:
+      - 'v*-rc*'
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  prepare-release:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          ref: main
+          fetch-depth: 0
+
+      - name: Extract version from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          # Extract base version: v1.0.0-rc0 -> 1.0.0
+          BASE_VERSION=$(echo "$TAG" | sed -E 's/^v([0-9]+\.[0-9]+\.[0-9]+)-rc[0-9]+$/\1/')
+          if [[ "$BASE_VERSION" == "$TAG" ]]; then
+            echo "Error: Tag does not match expected format v*.*.*-rc*"
+            exit 1
+          fi
+          echo "version=$BASE_VERSION" >> $GITHUB_OUTPUT
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "Extracted version: $BASE_VERSION from tag: $TAG"
+
+      - name: Check if version already exists
+        run: |
+          if [ -f VERSION ]; then
+            CURRENT=$(cat VERSION | tr -d '[:space:]')
+            if [ "$CURRENT" == "${{ steps.version.outputs.version }}" ]; then
+              echo "VERSION file already contains ${{ steps.version.outputs.version }}"
+              echo "This may indicate the release is already in progress"
+              exit 1
+            fi
+          fi
+
+      - name: Update VERSION file
+        run: |
+          echo "${{ steps.version.outputs.version }}" > VERSION
+          echo "Updated VERSION file to: ${{ steps.version.outputs.version }}"
+
+      - name: Update Chart.yaml versions
+        run: |
+          CHART_PATH="deploy/charts/release-flow-test/Chart.yaml"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Update version field
+          sed -i "s/^version:.*/version: $VERSION/" "$CHART_PATH"
+
+          # Update appVersion field
+          sed -i "s/^appVersion:.*/appVersion: \"$VERSION\"/" "$CHART_PATH"
+
+          echo "Updated Chart.yaml:"
+          grep -E "^(version|appVersion):" "$CHART_PATH"
+
+      - name: Update values.yaml image tag
+        run: |
+          VALUES_PATH="deploy/charts/release-flow-test/values.yaml"
+          VERSION="${{ steps.version.outputs.version }}"
+
+          # Update image.tag field
+          sed -i "s/^  tag:.*/  tag: \"$VERSION\"/" "$VALUES_PATH"
+
+          echo "Updated values.yaml image.tag:"
+          grep "tag:" "$VALUES_PATH"
+
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v6
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: "Release v${{ steps.version.outputs.version }}"
+          branch: release/v${{ steps.version.outputs.version }}
+          delete-branch: true
+          title: "Release v${{ steps.version.outputs.version }}"
+          body: |
+            ## Release v${{ steps.version.outputs.version }}
+
+            This PR was automatically created from RC tag `${{ steps.version.outputs.tag }}`.
+
+            ### Changes
+            - Updated `VERSION` file to `${{ steps.version.outputs.version }}`
+            - Updated `Chart.yaml` version to `${{ steps.version.outputs.version }}`
+            - Updated `Chart.yaml` appVersion to `${{ steps.version.outputs.version }}`
+            - Updated `values.yaml` image.tag to `${{ steps.version.outputs.version }}`
+
+            ### Next Steps
+            1. Review and approve this PR
+            2. Merge to main
+            3. The `create-release-tag` workflow will automatically create tag `v${{ steps.version.outputs.version }}`
+            4. The image will be built and published to GHCR
+            5. The `helm-publish` workflow will package and publish the Helm chart to GHCR
+
+            ### Checklist
+            - [ ] All CI checks pass
+          labels: |
+            release
+            automated

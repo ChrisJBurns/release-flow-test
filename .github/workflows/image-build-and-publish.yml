@@ -1,0 +1,87 @@
+# Build and Publish Image Workflow
+#
+# This workflow builds and publishes the container image using ko.
+# Called by run-on-main.yml and releaser.yml.
+
+name: Build and Sign Image
+
+on:
+  workflow_call:
+
+jobs:
+  image-build-and-publish:
+    name: Build and Publish Image
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+      packages: write
+      id-token: write
+
+    env:
+      BASE_REPO: "ghcr.io/chrisjburns/release-flow-test"
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: go.mod
+
+      - name: Compute version number
+        id: version-string
+        run: |
+          if [[ "${{ github.ref }}" == "refs/heads/main" ]]; then
+            # For main branch, use semver with -dev suffix
+            echo "tag=0.0.1-dev.${GITHUB_RUN_NUMBER}_$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          elif [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            # For tags, use the tag as is (assuming it's semver)
+            TAG="${{ github.ref_name }}"
+            echo "tag=$TAG" >> "$GITHUB_OUTPUT"
+          else
+            # For other branches, use branch name and run number
+            BRANCH="${{ github.ref_name }}"
+            echo "tag=0.0.1-$BRANCH.${GITHUB_RUN_NUMBER}_$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Setup ko
+        uses: ko-build/setup-ko@v0.9
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@v3
+
+      - name: Build and Push Image to GHCR
+        env:
+          VERSION: ${{ steps.version-string.outputs.tag }}
+          COMMIT: ${{ github.sha }}
+          BUILD_DATE: ${{ github.event.head_commit.timestamp }}
+          KO_CONFIG_PATH: ${{ github.workspace }}/.github/ko-ci.yml
+        run: |
+          TAG=$(echo "${{ steps.version-string.outputs.tag }}")
+          TAGS="-t $TAG"
+
+          # Add latest tag only if building from a tag
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            TAGS="$TAGS -t latest"
+          fi
+
+          KO_DOCKER_REPO=$BASE_REPO ko build --platform=linux/amd64,linux/arm64 --bare $TAGS . \
+            --image-label=org.opencontainers.image.source=https://github.com/ChrisJBurns/release-flow-test,org.opencontainers.image.title="release-flow-test"
+
+      - name: Sign Image with Cosign
+        run: |
+          TAG=$(echo "${{ steps.version-string.outputs.tag }}")
+          cosign sign -y $BASE_REPO:$TAG
+
+          # Sign the latest tag if building from a tag
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            cosign sign -y $BASE_REPO:latest
+          fi

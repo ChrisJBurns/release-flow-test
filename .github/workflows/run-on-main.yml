@@ -1,0 +1,27 @@
+# Main Branch Workflow
+#
+# This workflow runs on every push to the main branch.
+# It builds and publishes the container image.
+
+name: Main Branch
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  helm-lint:
+    name: Helm Lint
+    uses: ./.github/workflows/helm-lint.yml
+
+  image-build-and-push:
+    name: Build and Push Image
+    needs: [helm-lint]
+    uses: ./.github/workflows/image-build-and-publish.yml

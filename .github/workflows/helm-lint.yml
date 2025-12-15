@@ -1,0 +1,29 @@
+# Helm Chart Linting Workflow
+#
+# This workflow validates the Helm chart structure and templates.
+
+name: Helm Lint
+
+on:
+  workflow_call:
+  pull_request:
+
+jobs:
+  helm-lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Helm
+        uses: azure/setup-helm@v4
+        with:
+          version: 'v3.14.0'
+
+      - name: Lint Helm chart
+        run: |
+          helm lint deploy/charts/release-flow-test
+
+      - name: Template Helm chart
+        run: |
+          helm template test deploy/charts/release-flow-test --debug
