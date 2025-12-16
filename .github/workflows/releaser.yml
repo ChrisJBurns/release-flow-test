@@ -100,9 +100,15 @@ jobs:
       - name: Install Cosign
         uses: sigstore/cosign-installer@v3
 
-      - name: Login to GHCR
+      - name: Login to GHCR (Helm)
         run: |
           echo "${{ secrets.GITHUB_TOKEN }}" | helm registry login ${{ env.REGISTRY }} \
+            --username ${{ github.actor }} \
+            --password-stdin
+
+      - name: Login to GHCR (Cosign)
+        run: |
+          echo "${{ secrets.GITHUB_TOKEN }}" | cosign login ${{ env.REGISTRY }} \
             --username ${{ github.actor }} \
             --password-stdin
 
@@ -114,19 +120,35 @@ jobs:
           echo "Packaged chart: ${{ env.CHART_NAME }}-${{ steps.version.outputs.version }}.tgz"
 
       - name: Push to GHCR
+        id: push
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          helm push ${{ env.CHART_NAME }}-${{ steps.version.outputs.version }}.tgz \
-            oci://${{ env.REGISTRY }}/${OWNER}
+          OUTPUT=$(helm push ${{ env.CHART_NAME }}-${{ steps.version.outputs.version }}.tgz \
+            oci://${{ env.REGISTRY }}/${OWNER} 2>&1)
+          echo "$OUTPUT"
+
+          # Extract digest from helm push output (e.g., "Digest: sha256:abc123...")
+          DIGEST=$(echo "$OUTPUT" | grep 'Digest:' | awk '{print $2}' || echo "")
+          if [ -n "$DIGEST" ]; then
+            echo "digest=$DIGEST" >> $GITHUB_OUTPUT
+            echo "Captured digest: $DIGEST"
+          fi
+
           echo "Pushed chart to: oci://${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }}:${{ steps.version.outputs.version }}"
 
       - name: Sign Helm chart with Cosign
         run: |
           OWNER=$(echo "${{ github.repository_owner }}" | tr '[:upper:]' '[:lower:]')
-          CHART_REF="${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }}:${{ steps.version.outputs.version }}"
+          CHART_REF="${{ env.REGISTRY }}/${OWNER}/${{ env.CHART_NAME }}"
+          DIGEST="${{ steps.push.outputs.digest }}"
 
-          echo "Signing Helm chart: ${CHART_REF}"
-          cosign sign -y "${CHART_REF}"
+          if [ -n "$DIGEST" ]; then
+            echo "Signing Helm chart by digest: ${CHART_REF}@${DIGEST}"
+            cosign sign -y "${CHART_REF}@${DIGEST}"
+          else
+            echo "Signing Helm chart by tag: ${CHART_REF}:${{ steps.version.outputs.version }}"
+            cosign sign -y "${CHART_REF}:${{ steps.version.outputs.version }}"
+          fi
           echo "Helm chart signed successfully"
 
       - name: Verify published chart
