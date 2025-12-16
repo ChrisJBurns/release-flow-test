@@ -28,28 +28,44 @@ jobs:
       - name: Verify VERSION change is from release PR
         id: verify
         run: |
-          # Get the commit message that modified VERSION
+          # Get commit details for the VERSION file change
           COMMIT_MSG=$(git log -1 --pretty=%s -- VERSION)
-          echo "Commit message: $COMMIT_MSG"
+          COMMIT_AUTHOR=$(git log -1 --pretty=%an -- VERSION)
+          COMMIT_EMAIL=$(git log -1 --pretty=%ae -- VERSION)
 
-          # Expected pattern: "Release v{semver}" from prepare-release.yml
-          if [[ "$COMMIT_MSG" =~ ^Release\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
-            echo "✅ VERSION change is from a legitimate release PR"
-            echo "verified=true" >> $GITHUB_OUTPUT
+          echo "Commit message: $COMMIT_MSG"
+          echo "Commit author: $COMMIT_AUTHOR"
+          echo "Commit email: $COMMIT_EMAIL"
+          echo ""
+
+          # Track verification status
+          VERIFIED=true
+
+          # Check 1: Verify commit author is GitHub Actions bot
+          if [[ "$COMMIT_AUTHOR" == "github-actions[bot]" ]]; then
+            echo "✅ Commit author is GitHub Actions bot"
+            echo "author_verified=true" >> $GITHUB_OUTPUT
           else
-            echo "⚠️ VERSION change does not match release PR pattern"
-            echo "Expected: 'Release v{semver}'"
-            echo "Got: '$COMMIT_MSG'"
-            echo ""
-            echo "This could indicate:"
-            echo "  - A manual VERSION file edit (not via release PR)"
-            echo "  - An unexpected commit message format"
-            echo ""
-            echo "Proceeding with caution. Manual review recommended."
-            echo "verified=false" >> $GITHUB_OUTPUT
+            echo "❌ Commit author is NOT GitHub Actions bot"
+            echo "Expected: 'github-actions[bot]'"
+            echo "Got: '$COMMIT_AUTHOR'"
+            echo "author_verified=false" >> $GITHUB_OUTPUT
+            VERIFIED=false
           fi
 
-          # Also verify the VERSION content matches the commit message version
+          # Check 2: Verify commit message matches release PR pattern
+          if [[ "$COMMIT_MSG" =~ ^Release\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "✅ Commit message matches release PR pattern"
+            echo "message_verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Commit message does not match release PR pattern"
+            echo "Expected: 'Release v{semver}'"
+            echo "Got: '$COMMIT_MSG'"
+            echo "message_verified=false" >> $GITHUB_OUTPUT
+            VERIFIED=false
+          fi
+
+          # Check 3: Verify VERSION content matches commit message version
           VERSION=$(cat VERSION | tr -d '[:space:]')
           if [[ "$COMMIT_MSG" == "Release v$VERSION" ]]; then
             echo "✅ VERSION file content matches commit message"
@@ -59,6 +75,23 @@ jobs:
             echo "VERSION file: $VERSION"
             echo "Commit message: $COMMIT_MSG"
             echo "version_match=false" >> $GITHUB_OUTPUT
+            VERIFIED=false
+          fi
+
+          echo ""
+          if [ "$VERIFIED" = true ]; then
+            echo "✅ All verification checks passed"
+            echo "verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ Verification failed - this VERSION change may not be from a legitimate release PR"
+            echo ""
+            echo "This could indicate:"
+            echo "  - A manual VERSION file edit (not via release PR)"
+            echo "  - A commit by an unauthorized user"
+            echo "  - An unexpected commit message format"
+            echo ""
+            echo "Blocking release. Please investigate."
+            echo "verified=false" >> $GITHUB_OUTPUT
             exit 1
           fi
 
@@ -106,7 +139,6 @@ jobs:
       - name: Summary
         run: |
           TAG="v${{ steps.version.outputs.version }}"
-          VERIFIED="${{ steps.verify.outputs.verified }}"
 
           if [ "${{ steps.check-tag.outputs.exists }}" == "true" ]; then
             echo "## Tag Already Exists" >> $GITHUB_STEP_SUMMARY
@@ -118,11 +150,9 @@ jobs:
             echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
             echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
             echo "| Tag | \`$TAG\` |" >> $GITHUB_STEP_SUMMARY
-            if [ "$VERIFIED" == "true" ]; then
-              echo "| Source | ✅ Release PR (verified) |" >> $GITHUB_STEP_SUMMARY
-            else
-              echo "| Source | ⚠️ Manual/Unknown (review recommended) |" >> $GITHUB_STEP_SUMMARY
-            fi
+            echo "| Author Verified | ✅ github-actions[bot] |" >> $GITHUB_STEP_SUMMARY
+            echo "| Message Verified | ✅ Release PR pattern |" >> $GITHUB_STEP_SUMMARY
+            echo "| Version Verified | ✅ Matches commit |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "The following workflows will now run:" >> $GITHUB_STEP_SUMMARY
             echo "- \`releaser.yml\` - Build image and publish Helm chart to GHCR" >> $GITHUB_STEP_SUMMARY
