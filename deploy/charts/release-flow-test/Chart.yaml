@@ -2,8 +2,8 @@ apiVersion: v2
 name: release-flow-test
 description: Release Flow Test - Simple HTTP server for testing release workflows
 type: application
-version: 0.0.10
-appVersion: "0.0.10"
+version: 0.0.11
+appVersion: "0.0.11"
 home: https://github.com/ChrisJBurns/release-flow-test
 sources:
   - https://github.com/ChrisJBurns/release-flow-test
