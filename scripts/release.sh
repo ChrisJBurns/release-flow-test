@@ -1,240 +1,191 @@
 #!/bin/bash
-#
-# Release PR Creator
-#
-# This script creates a release PR by:
-# 1. Prompting for version bump type (major/minor/patch)
-# 2. Creating a release branch
-# 3. Updating VERSION, Chart.yaml, and values.yaml
-# 4. Creating a PR via gh CLI
-#
-# Usage: ./scripts/release.sh
-#
-# Environment variables (optional):
-#   VERSION_FILE  - Path to VERSION file (default: VERSION)
-#   CHART_PATH    - Path to Helm chart (default: deploy/charts/release-flow-test)
-
 set -e
 
-# Configuration (can be overridden by environment variables)
+# Configuration
 VERSION_FILE="${VERSION_FILE:-VERSION}"
 CHART_PATH="${CHART_PATH:-deploy/charts/release-flow-test}"
 
-# Colors for output
+# Colors
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
-NC='\033[0m' # No Color
+NC='\033[0m'
 
-echo -e "${BLUE}=== Release PR Creator ===${NC}"
-echo ""
+# Helpers
+info()  { echo -e "${BLUE}$1${NC}"; }
+success() { echo -e "${GREEN}$1${NC}"; }
+warn()  { echo -e "${YELLOW}$1${NC}"; }
+error() { echo -e "${RED}$1${NC}" >&2; exit 1; }
 
-# Check for required tools
-if ! command -v gh &> /dev/null; then
-  echo -e "${RED}Error: gh CLI is not installed${NC}"
-  echo "Install it from: https://cli.github.com/"
-  exit 1
-fi
+confirm() {
+  echo -n "$1 [y/N]: "
+  read -r response
+  [[ "$response" =~ ^[Yy]$ ]]
+}
 
-# Check gh auth status
-if ! gh auth status &> /dev/null; then
-  echo -e "${RED}Error: Not authenticated with gh CLI${NC}"
-  echo "Run: gh auth login"
-  exit 1
-fi
+# Preflight checks
+check_requirements() {
+  command -v gh &>/dev/null || error "gh CLI is not installed. Install from: https://cli.github.com/"
+  gh auth status &>/dev/null || error "Not authenticated with gh. Run: gh auth login"
+  [ -z "$(git status --porcelain)" ] || error "Working directory not clean. Commit or stash changes first."
+  [ -f "$VERSION_FILE" ] || error "VERSION file not found: $VERSION_FILE"
+}
 
-# Check for clean working directory
-if [ -n "$(git status --porcelain)" ]; then
-  echo -e "${RED}Error: Working directory is not clean${NC}"
-  echo "Please commit or stash your changes first."
-  exit 1
-fi
-
-# Ensure we're on main branch
-CURRENT_BRANCH=$(git branch --show-current)
-if [ "$CURRENT_BRANCH" != "main" ]; then
-  echo -e "${YELLOW}Warning: Not on main branch (currently on: $CURRENT_BRANCH)${NC}"
-  read -p "Continue anyway? [y/N]: " CONTINUE
-  if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
-    echo -e "${YELLOW}Cancelled${NC}"
-    exit 0
+check_branch() {
+  local branch=$(git branch --show-current)
+  if [ "$branch" != "main" ]; then
+    warn "Warning: Not on main branch (on: $branch)"
+    confirm "Continue anyway?" || exit 0
   fi
-fi
+}
 
-# Pull latest changes
-echo "Pulling latest changes..."
-git pull --quiet
+# Version parsing
+parse_version() {
+  local version=$(tr -d '[:space:]' < "$VERSION_FILE")
+  echo "$version" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$' || error "Invalid version: $version"
+  echo "$version"
+}
 
-# Read current version
-if [ ! -f "$VERSION_FILE" ]; then
-  echo -e "${RED}Error: $VERSION_FILE file not found${NC}"
-  exit 1
-fi
+get_version_parts() {
+  local version=$1
+  echo "$version" | cut -d. -f"$2"
+}
 
-CURRENT_VERSION=$(cat "$VERSION_FILE" | tr -d '[:space:]')
-echo -e "Current version: ${GREEN}${CURRENT_VERSION}${NC}"
-echo ""
+# Calculate new version
+calc_new_version() {
+  local current=$1 bump=$2
+  local major minor patch
 
-# Parse current version using cut (more portable than BASH_REMATCH)
-if ! echo "$CURRENT_VERSION" | grep -qE '^[0-9]+\.[0-9]+\.[0-9]+$'; then
-  echo -e "${RED}Error: Invalid version format in $VERSION_FILE: $CURRENT_VERSION${NC}"
-  echo "Expected format: MAJOR.MINOR.PATCH (e.g., 1.2.3)"
-  exit 1
-fi
+  major=$(get_version_parts "$current" 1)
+  minor=$(get_version_parts "$current" 2)
+  patch=$(get_version_parts "$current" 3)
 
-MAJOR=$(echo "$CURRENT_VERSION" | cut -d. -f1)
-MINOR=$(echo "$CURRENT_VERSION" | cut -d. -f2)
-PATCH=$(echo "$CURRENT_VERSION" | cut -d. -f3)
+  case $bump in
+    major) echo "$((major + 1)).0.0" ;;
+    minor) echo "${major}.$((minor + 1)).0" ;;
+    patch) echo "${major}.${minor}.$((patch + 1))" ;;
+  esac
+}
 
-# Ask user for bump type
-echo "What type of release is this?"
-echo ""
-echo -e "  ${YELLOW}1)${NC} major  - Breaking changes (${CURRENT_VERSION} → $((MAJOR + 1)).0.0)"
-echo -e "  ${YELLOW}2)${NC} minor  - New features, backward compatible (${CURRENT_VERSION} → ${MAJOR}.$((MINOR + 1)).0)"
-echo -e "  ${YELLOW}3)${NC} patch  - Bug fixes, backward compatible (${CURRENT_VERSION} → ${MAJOR}.${MINOR}.$((PATCH + 1)))"
-echo ""
-read -p "Enter choice [1/2/3]: " CHOICE
+# Prompt for bump type
+prompt_bump_type() {
+  local current=$1
+  local major minor patch
 
-case $CHOICE in
-  1|major)
-    NEW_VERSION="$((MAJOR + 1)).0.0"
-    BUMP_TYPE="major"
-    ;;
-  2|minor)
-    NEW_VERSION="${MAJOR}.$((MINOR + 1)).0"
-    BUMP_TYPE="minor"
-    ;;
-  3|patch)
-    NEW_VERSION="${MAJOR}.${MINOR}.$((PATCH + 1))"
-    BUMP_TYPE="patch"
-    ;;
-  *)
-    echo -e "${RED}Invalid choice: $CHOICE${NC}"
-    exit 1
-    ;;
-esac
+  major=$(get_version_parts "$current" 1)
+  minor=$(get_version_parts "$current" 2)
+  patch=$(get_version_parts "$current" 3)
 
-echo ""
-echo -e "Bump type: ${YELLOW}${BUMP_TYPE}${NC}"
-echo -e "New version: ${GREEN}${NEW_VERSION}${NC}"
+  echo ""
+  echo "What type of release is this?"
+  echo ""
+  echo "  1) major  - Breaking changes      ($current -> $((major + 1)).0.0)"
+  echo "  2) minor  - New features          ($current -> ${major}.$((minor + 1)).0)"
+  echo "  3) patch  - Bug fixes             ($current -> ${major}.${minor}.$((patch + 1)))"
+  echo ""
+  read -p "Enter choice [1/2/3]: " choice
 
-# Check if release branch already exists
-BRANCH_NAME="release/v${NEW_VERSION}"
-if git rev-parse --verify "$BRANCH_NAME" &> /dev/null; then
-  echo -e "${RED}Error: Branch $BRANCH_NAME already exists${NC}"
-  echo "Delete it first with: git branch -D $BRANCH_NAME"
-  exit 1
-fi
+  case $choice in
+    1|major) echo "major" ;;
+    2|minor) echo "minor" ;;
+    3|patch) echo "patch" ;;
+    *) error "Invalid choice: $choice" ;;
+  esac
+}
 
-# Check if tag already exists
-TAG="v${NEW_VERSION}"
-if git rev-parse "$TAG" &> /dev/null; then
-  echo -e "${RED}Error: Tag $TAG already exists${NC}"
-  echo "This version has already been released."
-  exit 1
-fi
+# Update version files
+update_files() {
+  local version=$1
 
-# Confirm with user
-echo ""
-echo -e "Ready to create release PR for: ${GREEN}v${NEW_VERSION}${NC}"
-echo ""
-echo "This will:"
-echo "  1. Create branch: $BRANCH_NAME"
-echo "  2. Update VERSION to: $NEW_VERSION"
-echo "  3. Update Chart.yaml version and appVersion to: $NEW_VERSION"
-echo "  4. Update values.yaml image.tag to: $NEW_VERSION"
-echo "  5. Commit and push the branch"
-echo "  6. Create a pull request"
-echo ""
-echo -n "Proceed? [y/N]: "
-read CONFIRM
-if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
-  echo -e "${YELLOW}Cancelled${NC}"
-  exit 0
-fi
+  echo "$version" > "$VERSION_FILE"
 
-# Create and checkout release branch
-echo ""
-echo "Creating branch $BRANCH_NAME..."
-git checkout -b "$BRANCH_NAME"
+  if [ -f "$CHART_PATH/Chart.yaml" ]; then
+    sed -i '' "s/^version:.*/version: $version/" "$CHART_PATH/Chart.yaml"
+    sed -i '' "s/^appVersion:.*/appVersion: \"$version\"/" "$CHART_PATH/Chart.yaml"
+  fi
 
-# Update VERSION file
-echo "Updating VERSION file..."
-echo "$NEW_VERSION" > "$VERSION_FILE"
-
-# Update Chart.yaml
-echo "Updating Chart.yaml..."
-CHART_FILE="${CHART_PATH}/Chart.yaml"
-if [ -f "$CHART_FILE" ]; then
-  sed -i '' "s/^version:.*/version: $NEW_VERSION/" "$CHART_FILE"
-  sed -i '' "s/^appVersion:.*/appVersion: \"$NEW_VERSION\"/" "$CHART_FILE"
-else
-  echo -e "${YELLOW}Warning: $CHART_FILE not found, skipping${NC}"
-fi
-
-# Update values.yaml
-echo "Updating values.yaml..."
-VALUES_FILE="${CHART_PATH}/values.yaml"
-if [ -f "$VALUES_FILE" ]; then
-  sed -i '' "s/^  tag:.*/  tag: \"$NEW_VERSION\"/" "$VALUES_FILE"
-else
-  echo -e "${YELLOW}Warning: $VALUES_FILE not found, skipping${NC}"
-fi
-
-# Commit changes
-echo "Committing changes..."
-git add "$VERSION_FILE" "${CHART_PATH}/Chart.yaml" "${CHART_PATH}/values.yaml" 2>/dev/null || true
-git commit -m "Release v${NEW_VERSION}"
-
-# Push branch
-echo "Pushing branch to origin..."
-git push -u origin "$BRANCH_NAME"
+  if [ -f "$CHART_PATH/values.yaml" ]; then
+    sed -i '' "s/^  tag:.*/  tag: \"$version\"/" "$CHART_PATH/values.yaml"
+  fi
+}
 
 # Create PR
-echo "Creating pull request..."
-PR_BODY="## Release v${NEW_VERSION}
+create_pr() {
+  local version=$1 bump=$2 branch=$3
+
+  gh pr create \
+    --title "Release v${version}" \
+    --body "## Release v${version}
 
 ### Changes
-- Updated \`VERSION\` file to \`${NEW_VERSION}\`
-- Updated \`Chart.yaml\` version to \`${NEW_VERSION}\`
-- Updated \`Chart.yaml\` appVersion to \`${NEW_VERSION}\`
-- Updated \`values.yaml\` image.tag to \`${NEW_VERSION}\`
+- Updated VERSION to \`${version}\`
+- Updated Chart.yaml version/appVersion to \`${version}\`
+- Updated values.yaml image.tag to \`${version}\`
 
 ### Release Type
-**${BUMP_TYPE}** release
+**${bump}**
 
-### Next Steps
-1. Review this PR
-2. Merge to main
-3. The \`create-release-tag\` workflow will automatically:
-   - Verify the release
-   - Create tag \`v${NEW_VERSION}\`
-   - Create a GitHub Release
-4. The \`releaser\` workflow will then:
-   - Build and publish the container image
-   - Package and publish the Helm chart to GHCR
+### After Merge
+1. Tag \`v${version}\` will be created automatically
+2. Container image will be built and signed
+3. Helm chart will be published and signed" \
+    --label "release" \
+    --head "$branch" \
+    --base "main"
+}
 
-### Checklist
-- [ ] All CI checks pass
-- [ ] Version bump type is correct (${BUMP_TYPE})"
+# Main
+main() {
+  info "=== Release PR Creator ==="
+  echo ""
 
-PR_URL=$(gh pr create \
-  --title "Release v${NEW_VERSION}" \
-  --body "$PR_BODY" \
-  --label "release" \
-  --head "$BRANCH_NAME" \
-  --base "main")
+  check_requirements
+  check_branch
 
-# Switch back to main
-echo "Switching back to main branch..."
-git checkout main
+  git pull --quiet
 
-echo ""
-echo -e "${GREEN}=== Success ===${NC}"
-echo -e "Release PR created: ${BLUE}${PR_URL}${NC}"
-echo ""
-echo "Next steps:"
-echo "  1. Review the PR"
-echo "  2. Merge when ready"
-echo "  3. The release will be created automatically"
+  local current_version=$(parse_version)
+  echo "Current version: $(success "$current_version")"
+
+  local bump_type=$(prompt_bump_type "$current_version")
+  local new_version=$(calc_new_version "$current_version" "$bump_type")
+  local branch="release/v${new_version}"
+
+  echo ""
+  echo "Bump type: $(warn "$bump_type")"
+  echo "New version: $(success "$new_version")"
+
+  # Validate
+  git rev-parse --verify "$branch" &>/dev/null && error "Branch $branch already exists"
+  git rev-parse "v${new_version}" &>/dev/null && error "Tag v${new_version} already exists"
+
+  echo ""
+  confirm "Create release PR for v${new_version}?" || { warn "Cancelled"; exit 0; }
+
+  # Create branch and update files
+  echo ""
+  echo "Creating branch..."
+  git checkout -b "$branch"
+
+  echo "Updating files..."
+  update_files "$new_version"
+
+  echo "Committing..."
+  git add -A
+  git commit -m "Release v${new_version}"
+
+  echo "Pushing..."
+  git push -u origin "$branch"
+
+  echo "Creating PR..."
+  local pr_url=$(create_pr "$new_version" "$bump_type" "$branch")
+
+  git checkout main
+
+  echo ""
+  success "=== Success ==="
+  echo "PR: $(info "$pr_url")"
+}
+
+main
