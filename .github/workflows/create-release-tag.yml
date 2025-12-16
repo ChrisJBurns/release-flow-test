@@ -25,6 +25,43 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Verify VERSION change is from release PR
+        id: verify
+        run: |
+          # Get the commit message that modified VERSION
+          COMMIT_MSG=$(git log -1 --pretty=%s -- VERSION)
+          echo "Commit message: $COMMIT_MSG"
+
+          # Expected pattern: "Release v{semver}" from prepare-release.yml
+          if [[ "$COMMIT_MSG" =~ ^Release\ v[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+            echo "✅ VERSION change is from a legitimate release PR"
+            echo "verified=true" >> $GITHUB_OUTPUT
+          else
+            echo "⚠️ VERSION change does not match release PR pattern"
+            echo "Expected: 'Release v{semver}'"
+            echo "Got: '$COMMIT_MSG'"
+            echo ""
+            echo "This could indicate:"
+            echo "  - A manual VERSION file edit (not via release PR)"
+            echo "  - An unexpected commit message format"
+            echo ""
+            echo "Proceeding with caution. Manual review recommended."
+            echo "verified=false" >> $GITHUB_OUTPUT
+          fi
+
+          # Also verify the VERSION content matches the commit message version
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+          if [[ "$COMMIT_MSG" == "Release v$VERSION" ]]; then
+            echo "✅ VERSION file content matches commit message"
+            echo "version_match=true" >> $GITHUB_OUTPUT
+          else
+            echo "❌ VERSION file content does not match commit message"
+            echo "VERSION file: $VERSION"
+            echo "Commit message: $COMMIT_MSG"
+            echo "version_match=false" >> $GITHUB_OUTPUT
+            exit 1
+          fi
+
       - name: Read version
         id: version
         run: |
@@ -69,6 +106,8 @@ jobs:
       - name: Summary
         run: |
           TAG="v${{ steps.version.outputs.version }}"
+          VERIFIED="${{ steps.verify.outputs.verified }}"
+
           if [ "${{ steps.check-tag.outputs.exists }}" == "true" ]; then
             echo "## Tag Already Exists" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -76,9 +115,15 @@ jobs:
           else
             echo "## Release Tag Created" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "Tag \`$TAG\` has been created and pushed." >> $GITHUB_STEP_SUMMARY
+            echo "| Property | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|----------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Tag | \`$TAG\` |" >> $GITHUB_STEP_SUMMARY
+            if [ "$VERIFIED" == "true" ]; then
+              echo "| Source | ✅ Release PR (verified) |" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "| Source | ⚠️ Manual/Unknown (review recommended) |" >> $GITHUB_STEP_SUMMARY
+            fi
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "The following workflows will now run:" >> $GITHUB_STEP_SUMMARY
-            echo "- \`image-build-and-publish.yml\` - Build and publish container image" >> $GITHUB_STEP_SUMMARY
-            echo "- \`helm-publish.yml\` - Package and publish Helm chart to GHCR" >> $GITHUB_STEP_SUMMARY
+            echo "- \`releaser.yml\` - Build image and publish Helm chart to GHCR" >> $GITHUB_STEP_SUMMARY
           fi
