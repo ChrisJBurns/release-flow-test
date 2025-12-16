@@ -4,6 +4,8 @@ version: '3'
 
 vars:
   VERSION_FILE: VERSION
+  CHART_NAME: release-flow-test
+  CHART_PATH: deploy/charts/release-flow-test
 
 tasks:
   default:
@@ -11,8 +13,8 @@ tasks:
     cmds:
       - task --list
 
-  release-candidate:
-    desc: Create a new release candidate tag
+  release:
+    desc: Create a new release PR
     aliases: [rc]
     interactive: true
     silent: true
@@ -28,7 +30,7 @@ tasks:
         BLUE='\033[0;34m'
         NC='\033[0m' # No Color
 
-        echo -e "${BLUE}=== Release Candidate Creator ===${NC}"
+        echo -e "${BLUE}=== Release PR Creator ===${NC}"
         echo ""
 
         # Check for required tools
@@ -44,6 +46,28 @@ tasks:
           echo "Run: gh auth login"
           exit 1
         fi
+
+        # Check for clean working directory
+        if [ -n "$(git status --porcelain)" ]; then
+          echo -e "${RED}Error: Working directory is not clean${NC}"
+          echo "Please commit or stash your changes first."
+          exit 1
+        fi
+
+        # Ensure we're on main branch
+        CURRENT_BRANCH=$(git branch --show-current)
+        if [ "$CURRENT_BRANCH" != "main" ]; then
+          echo -e "${YELLOW}Warning: Not on main branch (currently on: $CURRENT_BRANCH)${NC}"
+          read -p "Continue anyway? [y/N]: " CONTINUE
+          if [[ ! "$CONTINUE" =~ ^[Yy]$ ]]; then
+            echo -e "${YELLOW}Cancelled${NC}"
+            exit 0
+          fi
+        fi
+
+        # Pull latest changes
+        echo "Pulling latest changes..."
+        git pull --quiet
 
         # Read current version
         if [ ! -f "{{.VERSION_FILE}}" ]; then
@@ -69,9 +93,9 @@ tasks:
         # Ask user for bump type
         echo "What type of release is this?"
         echo ""
-        echo -e "  ${YELLOW}1)${NC} major  - Breaking changes (${MAJOR}.${MINOR}.${PATCH} → $((MAJOR + 1)).0.0)"
-        echo -e "  ${YELLOW}2)${NC} minor  - New features, backward compatible (${MAJOR}.${MINOR}.${PATCH} → ${MAJOR}.$((MINOR + 1)).0)"
-        echo -e "  ${YELLOW}3)${NC} patch  - Bug fixes, backward compatible (${MAJOR}.${MINOR}.${PATCH} → ${MAJOR}.${MINOR}.$((PATCH + 1)))"
+        echo -e "  ${YELLOW}1)${NC} major  - Breaking changes (${CURRENT_VERSION} → $((MAJOR + 1)).0.0)"
+        echo -e "  ${YELLOW}2)${NC} minor  - New features, backward compatible (${CURRENT_VERSION} → ${MAJOR}.$((MINOR + 1)).0)"
+        echo -e "  ${YELLOW}3)${NC} patch  - Bug fixes, backward compatible (${CURRENT_VERSION} → ${MAJOR}.${MINOR}.$((PATCH + 1)))"
         echo ""
         read -p "Enter choice [1/2/3]: " CHOICE
 
@@ -98,24 +122,34 @@ tasks:
         echo -e "Bump type: ${YELLOW}${BUMP_TYPE}${NC}"
         echo -e "New version: ${GREEN}${NEW_VERSION}${NC}"
 
-        # Fetch tags to check for existing RCs
-        echo ""
-        echo "Fetching tags..."
-        git fetch --tags --quiet
+        # Check if release branch already exists
+        BRANCH_NAME="release/v${NEW_VERSION}"
+        if git rev-parse --verify "$BRANCH_NAME" &> /dev/null; then
+          echo -e "${RED}Error: Branch $BRANCH_NAME already exists${NC}"
+          echo "Delete it first with: git branch -D $BRANCH_NAME"
+          exit 1
+        fi
 
-        # Find the next RC number for this version
-        RC_NUM=0
-        while git rev-parse "v${NEW_VERSION}-rc${RC_NUM}" &> /dev/null; do
-          RC_NUM=$((RC_NUM + 1))
-        done
-
-        RC_TAG="v${NEW_VERSION}-rc${RC_NUM}"
-        echo -e "Release candidate tag: ${GREEN}${RC_TAG}${NC}"
-        echo ""
+        # Check if tag already exists
+        TAG="v${NEW_VERSION}"
+        if git rev-parse "$TAG" &> /dev/null; then
+          echo -e "${RED}Error: Tag $TAG already exists${NC}"
+          echo "This version has already been released."
+          exit 1
+        fi
 
         # Confirm with user
         echo ""
-        echo -e "Ready to create: ${GREEN}${RC_TAG}${NC}"
+        echo -e "Ready to create release PR for: ${GREEN}v${NEW_VERSION}${NC}"
+        echo ""
+        echo "This will:"
+        echo "  1. Create branch: $BRANCH_NAME"
+        echo "  2. Update VERSION to: $NEW_VERSION"
+        echo "  3. Update Chart.yaml version and appVersion to: $NEW_VERSION"
+        echo "  4. Update values.yaml image.tag to: $NEW_VERSION"
+        echo "  5. Commit and push the branch"
+        echo "  6. Create a pull request"
+        echo ""
         echo -n "Proceed? [y/N]: "
         read CONFIRM
         if [[ ! "$CONFIRM" =~ ^[Yy]$ ]]; then
@@ -123,24 +157,89 @@ tasks:
           exit 0
         fi
 
-        # Create and push the tag
+        # Create and checkout release branch
         echo ""
-        echo "Creating tag ${RC_TAG}..."
-        git tag -a "${RC_TAG}" -m "Release candidate ${RC_TAG}"
+        echo "Creating branch $BRANCH_NAME..."
+        git checkout -b "$BRANCH_NAME"
 
-        echo "Pushing tag to origin..."
-        git push origin "${RC_TAG}"
+        # Update VERSION file
+        echo "Updating VERSION file..."
+        echo "$NEW_VERSION" > {{.VERSION_FILE}}
+
+        # Update Chart.yaml
+        echo "Updating Chart.yaml..."
+        CHART_FILE="{{.CHART_PATH}}/Chart.yaml"
+        if [ -f "$CHART_FILE" ]; then
+          sed -i '' "s/^version:.*/version: $NEW_VERSION/" "$CHART_FILE"
+          sed -i '' "s/^appVersion:.*/appVersion: \"$NEW_VERSION\"/" "$CHART_FILE"
+        else
+          echo -e "${YELLOW}Warning: $CHART_FILE not found, skipping${NC}"
+        fi
+
+        # Update values.yaml
+        echo "Updating values.yaml..."
+        VALUES_FILE="{{.CHART_PATH}}/values.yaml"
+        if [ -f "$VALUES_FILE" ]; then
+          sed -i '' "s/^  tag:.*/  tag: \"$NEW_VERSION\"/" "$VALUES_FILE"
+        else
+          echo -e "${YELLOW}Warning: $VALUES_FILE not found, skipping${NC}"
+        fi
+
+        # Commit changes
+        echo "Committing changes..."
+        git add {{.VERSION_FILE}} "{{.CHART_PATH}}/Chart.yaml" "{{.CHART_PATH}}/values.yaml" 2>/dev/null || true
+        git commit -m "Release v${NEW_VERSION}"
+
+        # Push branch
+        echo "Pushing branch to origin..."
+        git push -u origin "$BRANCH_NAME"
+
+        # Create PR
+        echo "Creating pull request..."
+        PR_URL=$(gh pr create \
+          --title "Release v${NEW_VERSION}" \
+          --body "## Release v${NEW_VERSION}
+
+        ### Changes
+        - Updated \`VERSION\` file to \`${NEW_VERSION}\`
+        - Updated \`Chart.yaml\` version to \`${NEW_VERSION}\`
+        - Updated \`Chart.yaml\` appVersion to \`${NEW_VERSION}\`
+        - Updated \`values.yaml\` image.tag to \`${NEW_VERSION}\`
+
+        ### Release Type
+        **${BUMP_TYPE}** release
+
+        ### Next Steps
+        1. Review this PR
+        2. Merge to main
+        3. The \`create-release-tag\` workflow will automatically:
+           - Verify the release
+           - Create tag \`v${NEW_VERSION}\`
+           - Create a GitHub Release
+        4. The \`releaser\` workflow will then:
+           - Build and publish the container image
+           - Package and publish the Helm chart to GHCR
+
+        ### Checklist
+        - [ ] All CI checks pass
+        - [ ] Version bump type is correct (${BUMP_TYPE})
+        " \
+          --label "release" \
+          --head "$BRANCH_NAME" \
+          --base "main")
+
+        # Switch back to main
+        echo "Switching back to main branch..."
+        git checkout main
 
         echo ""
         echo -e "${GREEN}=== Success ===${NC}"
-        echo -e "Tag ${GREEN}${RC_TAG}${NC} has been created and pushed."
+        echo -e "Release PR created: ${BLUE}${PR_URL}${NC}"
         echo ""
         echo "Next steps:"
-        echo "  1. The prepare-release workflow will create a PR"
-        echo "  2. Review and merge the PR"
-        echo "  3. The release will be automatically created"
-        echo ""
-        echo -e "View workflow: ${BLUE}$(gh repo view --json url -q .url)/actions${NC}"
+        echo "  1. Review the PR"
+        echo "  2. Merge when ready"
+        echo "  3. The release will be created automatically"
 
   release-status:
     desc: Show the status of the current release
@@ -170,23 +269,18 @@ tasks:
         LATEST_TAG=$(git describe --tags --abbrev=0 2>/dev/null || echo "none")
         echo -e "Latest tag: ${GREEN}${LATEST_TAG}${NC}"
 
-        # Latest RC tag
-        LATEST_RC=$(git tag -l 'v*-rc*' --sort=-version:refname | head -1)
-        if [ -n "$LATEST_RC" ]; then
-          echo -e "Latest RC tag: ${YELLOW}${LATEST_RC}${NC}"
-        fi
-
         # Open release PRs
         echo ""
         echo "Open release PRs:"
-        gh pr list --label release --json number,title,url --template '{{range .}}  #{{.number}} {{.title}}{{"\n"}}    {{.url}}{{"\n"}}{{end}}' || echo "  None"
+        gh pr list --label release --json number,title,url --template '{{range .}}  #{{.number}} {{.title}}{{"\n"}}    {{.url}}{{"\n"}}{{end}}' 2>/dev/null || echo "  None"
 
         # Recent releases
         echo ""
         echo "Recent releases:"
-        gh release list --limit 5 || echo "  None"
+        gh release list --limit 5 2>/dev/null || echo "  None"
 
   version:
     desc: Show the current version
+    silent: true
     cmds:
       - cat {{.VERSION_FILE}}

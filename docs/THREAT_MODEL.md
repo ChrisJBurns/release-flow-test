@@ -7,15 +7,17 @@ This document provides a threat and risk analysis for the automated release flow
 ### Release Flow Summary
 
 ```
-1. Developer pushes RC tag (v1.0.0-rc0)
+1. Developer runs: task release
            │
            ▼
 ┌─────────────────────────┐
-│  prepare-release.yml    │
+│  Taskfile (local)       │
+│  - Prompts for version  │
+│  - Creates release/v*   │
 │  - Updates VERSION file │
 │  - Updates Chart.yaml   │
 │  - Updates values.yaml  │
-│  - Creates PR           │
+│  - Creates PR via gh    │
 └─────────────────────────┘
            │
            ▼
@@ -25,6 +27,7 @@ This document provides a threat and risk analysis for the automated release flow
 ┌──────────────────────────┐
 │  create-release-tag.yml  │
 │  - Verifies commit msg   │
+│  - Verifies file changes │
 │  - Creates git tag       │
 │  - Creates GitHub Release│
 └──────────────────────────┘
@@ -170,24 +173,26 @@ This document provides a threat and risk analysis for the automated release flow
 
 ---
 
-### T5: Race Condition in Release Flow
+### T5: Unauthorized Release PR Content
 
 | Attribute | Value |
 |-----------|-------|
-| **Threat** | Multiple RC tags pushed simultaneously create conflicting release PRs or race conditions |
-| **Attack Vector** | Accidental or intentional parallel RC tag creation |
-| **Impact** | **Medium** - Conflicting PRs, version confusion, potential release of wrong version |
+| **Threat** | Release PR contains unexpected file changes beyond version files |
+| **Attack Vector** | Malicious or accidental inclusion of non-version files in release PR |
+| **Impact** | **Medium** - Unexpected code changes shipped in release |
 | **Likelihood** | Low |
 | **Risk Level** | **Low** |
 
 **Current Mitigations:**
-- VERSION file check prevents duplicate version PRs
+- ✅ File change verification - create-release-tag.yml only allows VERSION, Chart.yaml, and values.yaml changes
+- ✅ Blocks release if unexpected files were modified in the PR
+- ✅ Commit message verification - Must match "Release v{semver}" pattern
+- ✅ PR review required before merge
 - Tag existence check prevents duplicate tags
 
 **Recommended Mitigations:**
 - [ ] Add workflow concurrency controls (`concurrency` key in workflows)
-- [ ] Implement locking mechanism for release operations
-- [ ] Document release process to prevent parallel releases
+- [ ] Add CODEOWNERS requiring specific reviewers for release PRs
 
 ---
 
@@ -394,7 +399,8 @@ This document provides a threat and risk analysis for the automated release flow
 |---------|--------|-------|
 | Container image signing | ✅ Implemented | Cosign keyless |
 | Helm chart signing | ✅ Implemented | Cosign keyless |
-| Release PR verification | ✅ Implemented | Commit message pattern |
+| Release PR verification | ✅ Implemented | Commit message pattern check |
+| File change verification | ✅ Implemented | Blocks if non-release files changed |
 | Branch protection | ⚠️ Recommended | Not verified |
 | Tag protection | ⚠️ Recommended | Not verified |
 | Action SHA pinning | ❌ Not implemented | Using version tags |
