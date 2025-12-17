@@ -4,25 +4,20 @@
 image:
   repository: ghcr.io/chrisjburns/release-flow-test
   # tag is updated by the release workflow to match VERSION
-  tag: "0.0.14"
+  tag: "0.0.15"
   pullPolicy: IfNotPresent
-
 replicaCount: 1
-
 service:
   type: ClusterIP
   port: 8080
-
 resources: {}
-  # requests:
-  #   cpu: 100m
-  #   memory: 128Mi
-  # limits:
-  #   cpu: 500m
-  #   memory: 512Mi
+# requests:
+#   cpu: 100m
+#   memory: 128Mi
+# limits:
+#   cpu: 500m
+#   memory: 512Mi
 
 nodeSelector: {}
-
 tolerations: []
-
 affinity: {}
