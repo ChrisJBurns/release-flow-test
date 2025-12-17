@@ -172,16 +172,16 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git tag -a "$TAG" -m "Release $TAG"
-          git push https://x-access-token:${{ secrets.RELEASE_TOKEN }}@github.com/${{ github.repository }}.git "$TAG"
+          git push origin "$TAG"
           echo "Created and pushed tag: $TAG"
 
-          # Create GitHub Release
+          # Create GitHub Release (triggers releaser.yml via release event)
           gh release create "$TAG" \
             --title "Release $TAG" \
             --generate-notes
           echo "Created GitHub Release: $TAG"
         env:
-          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Summary
         run: |

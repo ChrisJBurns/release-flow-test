@@ -14,6 +14,40 @@ env:
   CHART_NAME: release-flow-test
 
 jobs:
+  release-verify:
+    name: Release Verify
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        
+      - name: Verify tag matches VERSION file
+        run: |
+          TAG="${GITHUB_REF_NAME}"
+          VERSION=$(cat VERSION | tr -d '[:space:]')
+
+          echo "Release tag: $TAG"
+          echo "VERSION file: $VERSION"
+
+          # Tag should be "v" + VERSION (e.g., v1.0.0)
+          EXPECTED_TAG="v${VERSION}"
+
+          if [[ "$TAG" != "$EXPECTED_TAG" ]]; then
+            echo ""
+            echo "❌ VERSION MISMATCH!"
+            echo "  Tag:      $TAG"
+            echo "  Expected: $EXPECTED_TAG (from VERSION file)"
+            echo ""
+            echo "The release tag does not match the VERSION file."
+            echo "This could indicate:"
+            echo "  - VERSION file was not updated correctly"
+            echo "  - Tag was created manually with wrong version"
+            exit 1
+          fi
+
+          echo ""
+          echo "✅ Tag matches VERSION file: $TAG"
+
   image-build-and-push:
     name: Build and Push Image
     # Skip RC/pre-release tags
@@ -38,59 +72,6 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Extract version
-        id: version
-        run: |
-          TAG="${{ github.event.release.tag_name }}"
-          VERSION="${TAG#v}"  # Remove 'v' prefix: v1.0.0 -> 1.0.0
-          echo "version=$VERSION" >> $GITHUB_OUTPUT
-          echo "tag=$TAG" >> $GITHUB_OUTPUT
-          echo "Extracted version: $VERSION from tag: $TAG"
-
-      - name: Verify VERSION file matches tag
-        run: |
-          FILE_VERSION=$(cat VERSION | tr -d '[:space:]')
-          TAG_VERSION="${{ steps.version.outputs.version }}"
-          if [ "$FILE_VERSION" != "$TAG_VERSION" ]; then
-            echo "Error: VERSION file ($FILE_VERSION) does not match tag ($TAG_VERSION)"
-            exit 1
-          fi
-          echo "VERSION file matches tag: $FILE_VERSION"
-
-      - name: Verify Chart.yaml versions
-        run: |
-          CHART_PATH="deploy/charts/${{ env.CHART_NAME }}/Chart.yaml"
-          EXPECTED="${{ steps.version.outputs.version }}"
-
-          CHART_VERSION=$(grep '^version:' "$CHART_PATH" | awk '{print $2}')
-          APP_VERSION=$(grep '^appVersion:' "$CHART_PATH" | awk '{print $2}' | tr -d '"')
-
-          if [ "$CHART_VERSION" != "$EXPECTED" ]; then
-            echo "Error: Chart version ($CHART_VERSION) does not match expected ($EXPECTED)"
-            exit 1
-          fi
-
-          if [ "$APP_VERSION" != "$EXPECTED" ]; then
-            echo "Error: App version ($APP_VERSION) does not match expected ($EXPECTED)"
-            exit 1
-          fi
-
-          echo "Chart.yaml versions verified: $EXPECTED"
-
-      - name: Verify values.yaml image tag
-        run: |
-          VALUES_PATH="deploy/charts/${{ env.CHART_NAME }}/values.yaml"
-          EXPECTED="${{ steps.version.outputs.version }}"
-
-          # Extract image.tag value
-          IMAGE_TAG=$(grep '^\s*tag:' "$VALUES_PATH" | head -1 | awk '{print $2}' | tr -d '"')
-
-          if [ "$IMAGE_TAG" != "$EXPECTED" ]; then
-            echo "Error: values.yaml image.tag ($IMAGE_TAG) does not match expected ($EXPECTED)"
-            exit 1
-          fi
-
-          echo "values.yaml image.tag verified: $EXPECTED"
 
       - name: Set up Helm
         uses: azure/setup-helm@v4

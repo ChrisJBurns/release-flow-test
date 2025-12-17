@@ -37,6 +37,13 @@ if ! command -v gh &> /dev/null; then
   exit 1
 fi
 
+if ! command -v yq &> /dev/null; then
+  echo -e "${RED}Error: yq is not installed${NC}"
+  echo "Install it with: brew install yq"
+  echo "Or see: https://github.com/mikefarah/yq#install"
+  exit 1
+fi
+
 # Check gh auth status
 if ! gh auth status &> /dev/null; then
   echo -e "${RED}Error: Not authenticated with gh CLI${NC}"
@@ -164,20 +171,19 @@ echo "Updating VERSION file..."
 echo "$NEW_VERSION" > "$VERSION_FILE"
 
 # Update Chart.yaml
-echo "Updating Chart.yaml..."
 CHART_FILE="${CHART_PATH}/Chart.yaml"
 if [ -f "$CHART_FILE" ]; then
-  sed -i '' "s/^version:.*/version: $NEW_VERSION/" "$CHART_FILE"
-  sed -i '' "s/^appVersion:.*/appVersion: \"$NEW_VERSION\"/" "$CHART_FILE"
+  echo "Updating Chart.yaml..."
+  yq -i ".version = \"$NEW_VERSION\" | .appVersion = \"$NEW_VERSION\"" "$CHART_FILE"
 else
   echo -e "${YELLOW}Warning: $CHART_FILE not found, skipping${NC}"
 fi
 
 # Update values.yaml
-echo "Updating values.yaml..."
 VALUES_FILE="${CHART_PATH}/values.yaml"
 if [ -f "$VALUES_FILE" ]; then
-  sed -i '' "s/^  tag:.*/  tag: \"$NEW_VERSION\"/" "$VALUES_FILE"
+  echo "Updating values.yaml..."
+  yq -i ".image.tag = \"$NEW_VERSION\"" "$VALUES_FILE"
 else
   echo -e "${YELLOW}Warning: $VALUES_FILE not found, skipping${NC}"
 fi
