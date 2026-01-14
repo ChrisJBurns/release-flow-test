@@ -39,10 +39,13 @@ jobs:
         with:
           bump_type: ${{ inputs.bump_type }}
           token: ${{ secrets.GITHUB_TOKEN }}
-          chart_path: deploy/charts/release-flow-test
           version_files: |
+            - file: deploy/charts/release-flow-test/Chart.yaml
+              path: version
+            - file: deploy/charts/release-flow-test/Chart.yaml
+              path: appVersion
             - file: deploy/charts/release-flow-test/values.yaml
-              path: .image.tag
+              path: image.tag
 
       - name: Summary
         run: |
