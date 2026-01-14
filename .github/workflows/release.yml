@@ -46,6 +46,8 @@ jobs:
               path: appVersion
             - file: deploy/charts/release-flow-test/values.yaml
               path: image.tag
+          helm_docs: deploy/charts
+          helm_docs_args: --template-files=README.md.gotmpl --template-files=./_templates.gotmpl
 
       - name: Summary
         run: |
