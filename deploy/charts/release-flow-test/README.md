@@ -1,0 +1,68 @@
+
+# Release Flow Test Helm Chart
+
+![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square)
+![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
+
+Release Flow Test - Simple HTTP server for testing release workflows
+
+**Homepage:** <https://github.com/ChrisJBurns/release-flow-test>
+
+## Maintainers
+
+| Name | Email | Url |
+| ---- | ------ | --- |
+| Chris Burns |  | <https://github.com/ChrisJBurns> |
+
+## Source Code
+
+* <https://github.com/ChrisJBurns/release-flow-test>
+
+---
+
+## TL;DR
+
+```console
+helm upgrade -i release-flow-test oci://ghcr.io/chrisjburns/release-flow-test/release-flow-test -n release-flow-test --create-namespace
+```
+
+## Prerequisites
+
+- Kubernetes 1.25+
+- Helm 3.10+
+
+## Usage
+
+### Installing the Chart
+
+```shell
+helm upgrade -i <release_name> oci://ghcr.io/chrisjburns/release-flow-test/release-flow-test --version=<version> -n <namespace> --create-namespace
+```
+
+> **Tip**: List all releases using `helm list`
+
+### Uninstalling the Chart
+
+To uninstall/delete the deployment:
+
+```console
+helm uninstall <release_name>
+```
+
+The command removes all the Kubernetes components associated with the chart and deletes the release.
+
+## Values
+
+| Key | Type | Default | Description |
+|-----|-------------|------|---------|
+| affinity | object | `{}` |  |
+| image.pullPolicy | string | `"IfNotPresent"` |  |
+| image.repository | string | `"ghcr.io/chrisjburns/release-flow-test"` |  |
+| image.tag | string | `"0.2.0"` |  |
+| nodeSelector | object | `{}` |  |
+| replicaCount | int | `1` |  |
+| resources | object | `{}` |  |
+| service.port | int | `8080` |  |
+| service.type | string | `"ClusterIP"` |  |
+| tolerations | list | `[]` |  |
+
