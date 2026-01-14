@@ -4,7 +4,7 @@
 image:
   repository: ghcr.io/chrisjburns/release-flow-test
   # tag is updated by the release workflow to match VERSION
-  tag: 0.5.0
+  tag: 0.6.0
   pullPolicy: IfNotPresent
 replicaCount: 1
 service:
