@@ -1,3 +1,3 @@
 module github.com/ChrisJBurns/release-flow-test
 
-go 1.23
+go 1.25
