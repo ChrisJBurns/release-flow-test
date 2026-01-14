@@ -4,24 +4,12 @@ version: '3'
 
 vars:
   VERSION_FILE: VERSION
-  CHART_PATH: deploy/charts/release-flow-test
 
 tasks:
   default:
     desc: List available tasks
     cmds:
       - task --list
-
-  release:
-    desc: Create a new release PR
-    aliases: [rc]
-    interactive: true
-    silent: true
-    env:
-      VERSION_FILE: "{{.VERSION_FILE}}"
-      CHART_PATH: "{{.CHART_PATH}}"
-    cmds:
-      - ./scripts/release.sh
 
   release-status:
     desc: Show the status of the current release

@@ -1,0 +1,53 @@
+# Release workflow using releaseo
+#
+# This workflow automates release PR creation by:
+# 1. Bumping the version (major/minor/patch)
+# 2. Updating VERSION, Chart.yaml, and values.yaml
+# 3. Creating a PR via GitHub API
+#
+# Usage: Trigger manually from Actions tab or via `gh workflow run release.yml`
+
+name: Release
+
+on:
+  workflow_dispatch:
+    inputs:
+      bump_type:
+        description: 'Version bump type'
+        required: true
+        type: choice
+        options:
+          - patch
+          - minor
+          - major
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  release:
+    name: Create Release PR
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Create Release PR
+        id: release
+        uses: stacklok/releaseo@v1
+        with:
+          bump_type: ${{ inputs.bump_type }}
+          token: ${{ secrets.GITHUB_TOKEN }}
+          chart_path: deploy/charts/release-flow-test
+          version_files: |
+            - file: deploy/charts/release-flow-test/values.yaml
+              path: .image.tag
+
+      - name: Summary
+        run: |
+          echo "## Release PR Created" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "- **Version**: ${{ steps.release.outputs.version }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **PR**: #${{ steps.release.outputs.pr_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- **URL**: ${{ steps.release.outputs.pr_url }}" >> $GITHUB_STEP_SUMMARY
