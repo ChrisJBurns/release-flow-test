@@ -2,10 +2,10 @@
 # This is a minimal chart for testing release workflows.
 
 image:
-  repository: ghcr.io/chrisjburns/release-flow-test
-  # tag is updated by the release workflow to match VERSION
-  tag: "0.2.0"
-  pullPolicy: IfNotPresent
+    repository: ghcr.io/chrisjburns/release-flow-test
+    # tag is updated by the release workflow to match VERSION
+    tag: "0.3.0"
+    pullPolicy: IfNotPresent
 replicaCount: 1
 service:
     type: ClusterIP
