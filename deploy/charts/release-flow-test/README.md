@@ -1,7 +1,6 @@
-
 # Release Flow Test Helm Chart
 
-![Version: 0.2.0](https://img.shields.io/badge/Version-0.2.0-informational?style=flat-square)
+![Version: 0.7.0](https://img.shields.io/badge/Version-0.7.0-informational?style=flat-square)
 ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 
 Release Flow Test - Simple HTTP server for testing release workflows
@@ -58,7 +57,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | affinity | object | `{}` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/chrisjburns/release-flow-test"` |  |
-| image.tag | string | `"0.2.0"` |  |
+| image.tag | string | `"0.7.0"` |  |
 | nodeSelector | object | `{}` |  |
 | replicaCount | int | `1` |  |
 | resources | object | `{}` |  |
