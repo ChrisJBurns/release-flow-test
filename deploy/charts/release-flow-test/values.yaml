@@ -8,6 +8,7 @@ image:
   tagUnquoted: 0.8.0
   tagWithPrefixAndQuotes: "v0.8.0"
   tagWithPrefixAndUnquoted: v0.8.0
+  imageTagWithPrefixAndQuotesUnquoted: "ghcr.io/chrisjburns/release-flow-test:v0.8.0"
   pullPolicy: IfNotPresent
 replicaCount: 1
 service:

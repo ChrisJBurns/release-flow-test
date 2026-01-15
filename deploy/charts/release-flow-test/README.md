@@ -1,3 +1,4 @@
+
 # Release Flow Test Helm Chart
 
 ![Version: 0.8.0](https://img.shields.io/badge/Version-0.8.0-informational?style=flat-square)
@@ -55,6 +56,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | Key | Type | Default | Description |
 |-----|-------------|------|---------|
 | affinity | object | `{}` |  |
+| image.imageTagWithPrefixAndQuotesUnquoted | string | `"ghcr.io/chrisjburns/release-flow-test:v0.8.0"` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/chrisjburns/release-flow-test"` |  |
 | image.tag | string | `"0.8.0"` |  |
