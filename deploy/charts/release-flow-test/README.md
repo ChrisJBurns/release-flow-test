@@ -1,3 +1,4 @@
+
 # Release Flow Test Helm Chart
 
 ![Version: 0.7.0](https://img.shields.io/badge/Version-0.7.0-informational?style=flat-square)
@@ -58,6 +59,10 @@ The command removes all the Kubernetes components associated with the chart and 
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/chrisjburns/release-flow-test"` |  |
 | image.tag | string | `"0.7.0"` |  |
+| image.tagUnquoted | string | `"0.7.0"` |  |
+| image.tagWithPrefixAndQuotes | string | `"v0.7.0"` |  |
+| image.tagWithPrefixAndUnquoted | string | `"v0.7.0"` |  |
+| initContainers | list | `[]` | Init containers to run before the main container Use this for setup tasks like preparing pgpass files, waiting for dependencies, etc. Init containers share the same volumes as the main container (extraVolumes) |
 | nodeSelector | object | `{}` |  |
 | replicaCount | int | `1` |  |
 | resources | object | `{}` |  |
