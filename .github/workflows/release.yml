@@ -53,6 +53,12 @@ jobs:
               path: appVersion
             - file: deploy/charts/release-flow-test/values.yaml
               path: image.tag
+            - file: deploy/charts/release-flow-test/values.yaml
+              path: image.tagUnquoted
+            - file: deploy/charts/release-flow-test/values.yaml
+              path: image.tagWithPrefixAndQuotes
+            - file: deploy/charts/release-flow-test/values.yaml
+              path: image.tagWithPrefixAndUnquoted
           helm_docs_args: --chart-search-root=deploy/charts --template-files=README.md.gotmpl --template-files=./_templates.gotmpl
 
       - name: Summary
