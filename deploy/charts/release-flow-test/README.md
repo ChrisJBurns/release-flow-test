@@ -56,7 +56,7 @@ The command removes all the Kubernetes components associated with the chart and 
 | Key | Type | Default | Description |
 |-----|-------------|------|---------|
 | affinity | object | `{}` |  |
-| image.imageTagWithPrefixAndQuotesUnquoted | string | `"ghcr.io/chrisjburns/release-flow-test:v0.8.0"` |  |
+| image.imageTagWithPrefixAndQuotes | string | `"ghcr.io/chrisjburns/release-flow-test:v0.8.0"` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/chrisjburns/release-flow-test"` |  |
 | image.tag | string | `"0.8.0"` |  |
