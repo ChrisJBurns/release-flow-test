@@ -42,7 +42,7 @@ jobs:
 
       - name: Create Release PR
         id: create-release-pr
-        uses: stacklok/releaseo@v1.0.9
+        uses: stacklok/releaseo@v1.1.0
         with:
           bump_type: ${{ inputs.bump_type }}
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -64,7 +64,7 @@ jobs:
             - file: deploy/charts/release-flow-test/values.yaml
               path: imageTagWithPrefixAndQuotes
               prefix: "v"
-          helm_docs_args: --chart-search-root=deploy/charts --template-files=README.md.gotmpl --template-files=./_templates.gotmpl
+          helm_docs_args: --chart-search-root=deploy/charts
 
       - name: Summary
         run: |
