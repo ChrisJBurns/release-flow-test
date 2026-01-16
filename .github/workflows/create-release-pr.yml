@@ -63,7 +63,7 @@ jobs:
               path: image.tagWithPrefixAndUnquoted
               prefix: "v"
             - file: deploy/charts/release-flow-test/values.yaml
-              path: imageTagWithPrefixAndQuotes
+              path: image.imageTagWithPrefixAndQuotes
               prefix: "v"
           helm_docs_args: --chart-search-root=deploy/charts
 
