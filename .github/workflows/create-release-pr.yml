@@ -42,9 +42,9 @@ jobs:
 
       - name: Create Release PR
         id: create-release-pr
-        uses: stacklok/releaseo@v1.3.0
+        uses: stacklok/releaseo@v0.0.1
         with:
-          releaseo_version: v1.3.0
+          releaseo_version: v0.0.1
           bump_type: ${{ inputs.bump_type }}
           token: ${{ secrets.GITHUB_TOKEN }}
           version_files: |
