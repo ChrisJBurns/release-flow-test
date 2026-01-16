@@ -4,11 +4,11 @@
 image:
   repository: ghcr.io/chrisjburns/release-flow-test
   # tag is updated by the release workflow to match VERSION
-  tag: "0.8.0"
-  tagUnquoted: 0.8.0
-  tagWithPrefixAndQuotes: "v0.8.0"
-  tagWithPrefixAndUnquoted: v0.8.0
-  imageTagWithPrefixAndQuotes: "ghcr.io/chrisjburns/release-flow-test:v0.8.0"
+  tag: "0.9.0"
+  tagUnquoted: 0.9.0
+  tagWithPrefixAndQuotes: "v0.9.0"
+  tagWithPrefixAndUnquoted: v0.9.0
+  imageTagWithPrefixAndQuotes: "ghcr.io/chrisjburns/release-flow-test:v0.9.0"
   pullPolicy: IfNotPresent
 replicaCount: 1
 service:
