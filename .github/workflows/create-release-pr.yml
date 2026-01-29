@@ -67,7 +67,7 @@ jobs:
               prefix: "v"
             - file: deploy/charts/release-flow-test/values.yaml
               path: image.imageTagWithPrefix
-              prefix: "v"
+              prefix: v
           helm_docs_args: --chart-search-root=deploy/charts
 
       - name: Summary
