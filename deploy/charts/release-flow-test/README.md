@@ -1,6 +1,6 @@
 # Release Flow Test Helm Chart
 
-![Version: 0.12.1](https://img.shields.io/badge/Version-0.12.1-informational?style=flat-square)
+![Version: 0.12.2](https://img.shields.io/badge/Version-0.12.2-informational?style=flat-square)
 ![Type: application](https://img.shields.io/badge/Type-application-informational?style=flat-square)
 
 Release Flow Test - Simple HTTP server for testing release workflows
@@ -55,14 +55,14 @@ The command removes all the Kubernetes components associated with the chart and 
 | Key | Type | Default | Description |
 |-----|------|---------|-------------|
 | affinity | object | `{}` |  |
-| image.imageTagWithPrefix | string | `"ghcr.io/chrisjburns/release-flow-test:v0.12.1"` |  |
-| image.imageTagWithPrefixAndQuotes | string | `"ghcr.io/chrisjburns/release-flow-test:v0.12.1"` |  |
+| image.imageTagWithPrefix | string | `"ghcr.io/chrisjburns/release-flow-test:v0.12.2"` |  |
+| image.imageTagWithPrefixAndQuotes | string | `"ghcr.io/chrisjburns/release-flow-test:v0.12.2"` |  |
 | image.pullPolicy | string | `"IfNotPresent"` |  |
 | image.repository | string | `"ghcr.io/chrisjburns/release-flow-test"` |  |
-| image.tag | string | `"0.12.1"` |  |
-| image.tagUnquoted | string | `"0.12.1"` |  |
-| image.tagWithPrefixAndQuotes | string | `"v0.12.1"` |  |
-| image.tagWithPrefixAndUnquoted | string | `"v0.12.1"` |  |
+| image.tag | string | `"0.12.2"` |  |
+| image.tagUnquoted | string | `"0.12.2"` |  |
+| image.tagWithPrefixAndQuotes | string | `"v0.12.2"` |  |
+| image.tagWithPrefixAndUnquoted | string | `"v0.12.2"` |  |
 | initContainers | list | `[]` | Init containers to run before the main container Use this for setup tasks like preparing pgpass files, waiting for dependencies, etc. Init containers share the same volumes as the main container (extraVolumes) |
 | nodeSelector | object | `{}` |  |
 | replicaCount | int | `1` |  |
